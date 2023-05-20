@@ -55,40 +55,6 @@ str(recs)
 summary(recs)
 
 
-# recs <- readRDS(paste0(path.rec,"TotalReceiverSummary_2013-2020_1.rds"))
-# 
-# str(recs)
-# 
-# # create new column for region
-# recs_og <- recs %>% 
-#   mutate(regions = case_when(StationName %in% "Crown Point" ~ "South Lake",
-#                              deploy_lat > 44.10 & deploy_lat < 44.40 & Tributary %in% "Main Lake" ~ "Main Lake South",
-#                              deploy_lat > 44.40 & deploy_lat < 44.56 & Tributary %in% "Main Lake" ~ "Main Lake Central",
-#                              deploy_lat > 44.56 & Tributary %in% "Main Lake" ~ "Main Lake North",
-#                              Tributary %!in% "Main Lake" ~ Tributary,
-#                              TRUE ~ "regions")) %>% 
-#   filter(deploy_date_time <= "2018-01-01" &
-#            StationName %!in% c("BurlingtonBay_RangeTest","SandBarInlandSea_RangeTest")) %>% 
-#   mutate(regions = factor(regions),
-#          StationName = factor(StationName),
-#          deploy_long = abs(deploy_long)*(-1),
-#          Tributary = NULL) %>% 
-#   mutate(regions = as.character(regions)) %>% 
-#   mutate(regions_short = case_when(regions %in% c("Carry Bay","Missisquoi") ~ "NE Channel",
-#                                    regions %in% "Northwest Arm" ~ "Main Lake North",
-#                                    regions %!in% c("Carry Bay","Missisquoi","Northwest Arm") ~ regions,
-#                                    TRUE ~ "regions_short")) %>% 
-#   mutate(regions = factor(regions),
-#          regions_short = factor(regions_short,
-#                                 levels = c('NE Channel','Gut','Inland Sea','Main Lake North','Main Lake Central','Main Lake South','Malletts', 'South Lake'),
-#                                 labels = c('NE Channel','Gut','Inland Sea','Main North','Main Central','Main South','Malletts', 'South Lake')))
-# 
-# 
-# # Corrections to recs file
-# recs_og$recover_date_time[recs_og$StationName %in% "Gut" & recs_og$recover_date_time == "2017-05-05"] <- "2017-06-23" # change recover time due to later detection and unknown recover date in catos log
-# recs_og$deploy_date_time[recs_og$StationName %in% "Gordon" & recs_og$deploy_date_time == "2017-07-26"] <- "2016-11-02" # change deploy date due to prior failed retrieval
-
-
 # summarize receiver locations
 recs_short <- recs %>% 
   group_by(StationName,regions) %>% 
