@@ -32,6 +32,23 @@ path.shp <- paste0(path.drive,"ArcGIS Pro 2.2/Shapefiles/LakeChamplain/")
 
 
 ###----------------------------------------------------------------------------------------------------
+### Generate functions
+###----------------------------------------------------------------------------------------------------
+
+#### ---
+# FUNCTION: %!in%
+# description: negate based on values in a list
+#### ---
+
+`%!in%` <- Negate(`%in%`)
+
+# end of %!in%
+#### ---
+###----------------------------------------------------------------------------------------------------
+
+
+
+###----------------------------------------------------------------------------------------------------
 ### Load data
 ###----------------------------------------------------------------------------------------------------
 ### Lake data
@@ -46,6 +63,18 @@ st_crs(champ) <- 4326
 setwd(paste0(path.shp, "ChamplainRegions/"))
 lc_regions <- st_read(dsn = ".",layer = "ChamplainRegions")
 
+lc_regions_short <- lc_regions %>% 
+  mutate(regions = case_when(GNIS_NAME %in% c("Inland_Sea","Gut","NE_Channel") ~ "Northeast Arm",
+                             GNIS_NAME %in% "Missisquoi" ~ "Missisquoi",
+                             GNIS_NAME %in% "Main_North" ~ "Main Lake North",
+                             GNIS_NAME %in% "Main_Central" ~ "Main Lake Central",
+                             GNIS_NAME %in% "Main_South" ~ "Main Lake South",
+                             GNIS_NAME %in% "Malletts" ~ "Malletts Bay",
+                             GNIS_NAME %in% "South_Lake" ~ "South Lake")) %>% 
+  group_by(regions) %>% 
+  summarize(geometry = sf::st_union(geometry),
+            Area_sqkm = sum(AREASQKM))
+
 
 
 ### Receiver data
@@ -58,14 +87,21 @@ summary(recs)
 recs_short <- recs %>% 
   group_by(StationName,regions) %>% 
   summarize(deploy_lon = mean(deploy_long), deploy_lat = mean(deploy_lat)) %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate(regions = case_when(regions %in% c("Inland Sea","Gut","NE Channel") ~ "Northeast Arm",
+                             regions %in% "Missisquoi" ~ "Missisquoi",
+                             regions %in% "Main North" ~ "Main Lake North",
+                             regions %in% "Main Central" ~ "Main Lake Central",
+                             regions %in% "Main South" ~ "Main Lake South",
+                             regions %in% "Malletts" ~ "Malletts Bay",
+                             regions %in% "South Lake" ~ "South Lake"))
 
 # convert to sp object
 recs_sf <- st_as_sf(x = recs_short, coords = c('deploy_lon', 'deploy_lat'), crs = 4326)
 
 
 ### Simulation data
-sim_dets <- readRDS(paste0(path.sim, "simulated_detections_Apr2023.rds"))
+sim_dets <- readRDS(paste0(path.sim, "simulated_detections_June2023.rds"))
 ###----------------------------------------------------------------------------------------------------
 
 
@@ -83,25 +119,42 @@ sim_dets_nodups <- sim_dets %>%
 
 str(sim_dets_nodups)
 
+# reduce columns for move to run
+station_nums <- recs_short %>% 
+  select(StationName, deploy_lat) %>% 
+  arrange(deploy_lat) %>% 
+  mutate(station_id = 1:nrow(recs_short),
+         deploy_lat = NULL)
+
+sim_dets_short <- sim_dets_nodups %>% 
+  left_join(station_nums) %>% 
+  mutate(animal_id = sub('.*_', '', animal_id),
+         start_region = NULL,
+         StationName = NULL) %>% 
+  mutate(animal_id = as.numeric(animal_id))
+  
+
 test <- sim_dets_nodups %>% 
   filter(animal_id %in% animal_id[1])
   
 
 ### convert data to move object
 test_move <- move(x = test$deploy_lon,
-       y = test$deploy_lat,
-       time = test$detection_timestamp_utc,
-       proj = CRS("+proj=longlat +ellps=WGS84"),
-       data = test,
-       animal = test$animal_id)
+                  y = test$deploy_lat,
+                  time = test$detection_timestamp_utc,
+                  proj = CRS("+proj=longlat +ellps=WGS84"),
+                  data = test,
+                  animal = test$animal_id)
 
 sim_ids <- unique(sim_dets_nodups$animal_id)
 
-lkt_move <- move(x = sim_dets_nodups$deploy_lon,
-                 y = sim_dets_nodups$deploy_lat,
-                 time = sim_dets_nodups$detection_timestamp_utc,
-                 proj = CRS("+proj=longlat +ellps=WGS84"),
-                 data = sim_dets_nodups,
-                 animal = sim_ids)
+sim_dets_move <- sim_dets_short %>% 
+  # group_by(animal_id) %>% 
+  move(x = sim_dets_short$deploy_lon,
+       y = sim_dets_short$deploy_lat,
+       time = sim_dets_short$detection_timestamp_utc,
+       proj = CRS("+proj=longlat +ellps=WGS84"),
+       data = sim_dets_short,
+       animal = sim_dets_short$animal_id)
 
 ###----------------------------------------------------------------------------------------------------
