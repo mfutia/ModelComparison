@@ -47,7 +47,6 @@ path.shp <- paste0(path.drive,"ArcGIS Pro 2.2/Shapefiles/LakeChamplain/")
 ###----------------------------------------------------------------------------------------------------
 
 
-
 ###----------------------------------------------------------------------------------------------------
 ### Load data
 ###----------------------------------------------------------------------------------------------------
@@ -56,8 +55,7 @@ setwd(paste(path.shp, "ChamplainOutline/",sep = ""))
 lc_outline <- st_read(dsn = ".",
                       layer = "VT_Lake_Champlain_extracted_from_VHDCARTO__polygon")
 
-champ <- st_as_sf(lc_outline)
-st_crs(champ) <- 4326
+st_crs(lc_outline) <- 4326
 
 # load lake region polygon
 setwd(paste0(path.shp, "ChamplainRegions/"))
@@ -96,7 +94,7 @@ recs_short <- recs %>%
                              regions %in% "Malletts" ~ "Malletts Bay",
                              regions %in% "South Lake" ~ "South Lake"))
 
-# convert to sp object
+# convert to sf object
 recs_sf <- st_as_sf(x = recs_short, coords = c('deploy_lon', 'deploy_lat'), crs = 4326)
 
 
@@ -115,15 +113,16 @@ sim_dets_nodups <- sim_dets %>%
   mutate(time_diff = c(NA,diff(detection_timestamp_utc))) %>% 
   filter(time_diff %!in% 0) %>% 
   mutate(animal_id = as.character(animal_id)) %>% 
+  arrange(animal_id) %>% 
   ungroup()
 
 str(sim_dets_nodups)
 
-# reduce columns for move to run
+# reduce columns for move object
 station_nums <- recs_short %>% 
-  select(StationName, deploy_lat) %>% 
+  dplyr::select(StationName, deploy_lat) %>% 
   arrange(deploy_lat) %>% 
-  mutate(station_id = 1:nrow(recs_short),
+  mutate(station_id = 1:nrow(recs_short), # create 
          deploy_lat = NULL)
 
 sim_dets_short <- sim_dets_nodups %>% 
@@ -134,7 +133,7 @@ sim_dets_short <- sim_dets_nodups %>%
   mutate(animal_id = as.numeric(animal_id))
   
 
-test <- sim_dets_nodups %>% 
+test <- sim_dets_short %>% 
   filter(animal_id %in% animal_id[1])
   
 
@@ -146,15 +145,38 @@ test_move <- move(x = test$deploy_lon,
                   data = test,
                   animal = test$animal_id)
 
-sim_ids <- unique(sim_dets_nodups$animal_id)
+# sim_ids <- unique(sim_dets_nodups$animal_id)
 
-sim_dets_move <- sim_dets_short %>% 
-  # group_by(animal_id) %>% 
-  move(x = sim_dets_short$deploy_lon,
-       y = sim_dets_short$deploy_lat,
-       time = sim_dets_short$detection_timestamp_utc,
-       proj = CRS("+proj=longlat +ellps=WGS84"),
-       data = sim_dets_short,
-       animal = sim_dets_short$animal_id)
+sim_dets_move <- move(x = sim_dets_short$deploy_lon,
+                      y = sim_dets_short$deploy_lat,
+                      time = as.POSIXct(sim_dets_short$detection_timestamp_utc, tz = "UTC"),
+                      proj = CRS("+proj=longlat +ellps=WGS84"),
+                      animal = sim_dets_short$animal_id)
+###----------------------------------------------------------------------------------------------------
+
 
 ###----------------------------------------------------------------------------------------------------
+### Run dynamic brownian bridge function
+###----------------------------------------------------------------------------------------------------
+# create raster of lake outline
+lc_raster <- raster(lc_outline)
+
+# transform coordinates from long/lat projection
+test_trans <- spTransform(test_move,
+                          CRSobj="+proj=aeqd +ellps=WGS84")
+lc_trans <- spTransform(lc_raster,
+                        CRSobj="+proj=aeqd +ellps=WGS84")
+
+# run dBBMM with test data
+test_dBBMM <- brownian.bridge.dyn(object = test_trans,
+                                  raster = lc_raster,
+                                  location.error = 12, # taken from example
+                                  ext = 0.3) # default
+
+### Code from move vignette
+data2 <- spTransform(leroy[30:90,], CRSobj="+proj=aeqd +ellps=WGS84", center=TRUE)
+## create a DBBMM object
+dbbmm <- brownian.bridge.dyn(object=data2, location.error=12, dimSize=125, ext=1.2,
+                             time.step=2, margin=15)
+###----------------------------------------------------------------------------------------------------
+
